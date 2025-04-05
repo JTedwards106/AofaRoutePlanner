@@ -4,7 +4,20 @@ import java.util.*;
 
 public class DijkstraPathFinder {
     public RouteResult findShortestPath(Town start, Town end, RouteCriteria criteria) {
-        Map<Town, Integer> distances = new HashMap<>();
+         /* Prevents NullPointerException by validating all input parameters */
+       if (start == null || end == null || criteria == null) {
+            throw new IllegalArgumentException("Start town, end town, and criteria cannot be null");
+        }
+         /* Ensures start/end towns exist in the graph */
+        Set<Town> allTowns = getAllTowns(start);
+        if (!allTowns.contains(start) || !allTowns.contains(end)) {
+            throw new RouteCalculationException("Start or end town not found in road network");
+        }
+
+        /* Prevents unnecessary computation when start == end */
+        if (start.equals(end)) {
+            return new RouteResult(Collections.singletonList(start.getName()), 0, 0);
+        } Map<Town, Integer> distances = new HashMap<>();
         Map<Town, Integer> times = new HashMap<>();
         Map<Town, Town> previous = new HashMap<>();
         
@@ -28,9 +41,17 @@ public class DijkstraPathFinder {
             if (current.equals(end)) break;
 
             for (Road road : current.getConnections()) {
+                /* Skips invalid roads and prevents NullPointerException */
+                if (road == null || road.getDestination() == null) continue;
                 if (criteria.shouldAvoid(road.getType())) continue;
 
                 Town neighbor = road.getDestination();
+                /* Detects invalid negative distances/times */
+                 if (road.getDistance() < 0 || road.getAdjustedTime() < 0) {
+                    throw new RouteCalculationException(
+                        "Invalid road weights between " + current.getName() + 
+                        " and " + neighbor.getName());
+                }
                 int newDist = distances.get(current) + road.getDistance();
                 int newTime = times.get(current) + road.getAdjustedTime();
 
@@ -47,13 +68,23 @@ public class DijkstraPathFinder {
                 }
             }
         }
+         /* Handles cases where no valid route exists */
+        if (!previous.containsKey(end)) {
+            throw new RouteCalculationException(
+                "No valid path found between " + start.getName() + 
+                " and " + end.getName() + " with current criteria");
+        }
 
         return buildResult(previous, end, distances.get(end), times.get(end));
     }
 
     private RouteResult buildResult(Map<Town, Town> previous, Town end, 
                                   Integer distance, Integer time) {
-        if (distance == null || time == null) return null;
+        
+       /* Ensures the computed path has valid values */
+        if (distance == null || time == null || distance == Integer.MAX_VALUE) {
+            throw new RouteCalculationException("Invalid route calculation result");
+        }
 
         List<String> path = new ArrayList<>();
         Town current = end;
@@ -66,6 +97,7 @@ public class DijkstraPathFinder {
     }
 
     private Set<Town> getAllTowns(Town start) {
+       /* Prevents infinite loops with cycle detection */
         Set<Town> visited = new HashSet<>();
         Queue<Town> queue = new LinkedList<>();
         queue.add(start);
@@ -76,7 +108,9 @@ public class DijkstraPathFinder {
             
             visited.add(current);
             for (Road road : current.getConnections()) {
-                queue.add(road.getDestination());
+                if (road != null && road.getDestination() != null) {
+                    queue.add(road.getDestination());
+                }
             }
         }
         return visited;
